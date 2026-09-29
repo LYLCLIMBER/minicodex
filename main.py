@@ -11,6 +11,7 @@ from openai.types.responses import (
     ResponseInputItemParam,
     ResponseInputParam,
 )
+from prompt_toolkit import prompt
 
 from tools import calculator, shell
 
@@ -71,66 +72,84 @@ tool_handlers = {
 }
 
 # --------------------------
-# initial input
-# --------------------------
-
-input_list: ResponseInputParam = [
-    {"role": "user", "content": "请告诉我这个项目下都有什么。"}
-]
-
-# --------------------------
 # agent loop
 # --------------------------
 
 MAX_STEPS = 10
 
-for step in range(MAX_STEPS):
-    response = client.responses.create(
-        model="deepseek-flash",
-        instructions="You are a helpful assistant.",
-        input=input_list,
-        tools=tools,
-    )
-
-    print(f"\n--- step {step + 1} ---")
-
-    # 把模型本轮的所有输出加入上下文
-    for item in response.output:
-        print(type(item))
-        print(item)
-        input_list.append(
-            cast(
-                ResponseInputItemParam,
-                item.model_dump(exclude_none=True),
-            )
+def run_agent(input_list: ResponseInputParam) -> str:
+    for step in range(MAX_STEPS):
+        response = client.responses.create(
+            model="deepseek-flash",
+            instructions="You are a helpful assistant.",
+            input=input_list,
+            tools=tools,
         )
 
-    # 找出所有 tool calls；注意 function call 只是 tool call 的一种具体形式
-    function_calls = [item for item in response.output if item.type == "function_call"]
+        # print(f"\n--- step {step + 1} ---")
 
-    # 如果没有 tool calls，说明模型已经给出最终回答
-    if not function_calls:
-        print("\nFinal answer:")
-        print(response.output_text)
-        break
+        # 把模型本轮的所有输出加入上下文
+        for item in response.output:
+            # print(type(item))
+            # print(item)
+            input_list.append(
+                cast(
+                    ResponseInputItemParam,
+                    item.model_dump(exclude_none=True),
+                )
+            )
 
-    # 执行所有 tool calls
-    for call in function_calls:
-        arguments = json.loads(call.arguments)
-        handler = tool_handlers[call.name]
-        result = handler(**arguments)
+        # 找出所有 tool calls；注意 function call 只是 tool call 的一种具体形式
+        function_calls = [item for item in response.output if item.type == "function_call"]
 
-        print(f"tool: {call.name}")
-        print(f"arguments: {call.arguments}")
-        print(f"result: {result}")
+        # 如果没有 tool calls，说明模型已经给出最终回答
+        if not function_calls:
+            return response.output_text
 
-        # 将工具执行结果返回给模型
+        # 执行所有 tool calls
+        for call in function_calls:
+            arguments = json.loads(call.arguments)
+            handler = tool_handlers[call.name]
+            result = handler(**arguments)
+
+            # print(f"tool: {call.name}")
+            # print(f"arguments: {call.arguments}")
+            # print(f"result: {result}")
+
+            # 将工具执行结果返回给模型
+            input_list.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": json.dumps(result, ensure_ascii=False),
+                }
+            )
+    raise RuntimeError("Agent exceeded maximum number of steps")
+
+def main():
+    input_list: ResponseInputParam = []
+
+    while True:
+        try:
+            user_input = prompt("you>").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        
+        if not user_input:
+            continue
+        if user_input in {"/exit", "/quit"}:
+            break
+
         input_list.append(
             {
-                "type": "function_call_output",
-                "call_id": call.call_id,
-                "output": json.dumps(result, ensure_ascii=False),
+                "role": "user",
+                "content": user_input,
             }
         )
-else:
-    raise RuntimeError("Agent exceeded maximum number of steps")
+
+        answer = run_agent(input_list)
+        print(f"\nassistant>{answer}\n")
+
+if __name__ == "__main__":
+    main()

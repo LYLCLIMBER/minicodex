@@ -4,19 +4,21 @@ import subprocess
 from pathlib import Path
 from typing import TypedDict
 
-
 # ----------------
 # shell
 # ----------------
+
+WORKSPACE = Path.cwd().resolve()
+MAX_OUTPUT = 20_000
+SANDBOX_PATH = "/usr/local/bin:/usr/bin:/bin"
+
+if(WORKSPACE / ".venv" / "bin").is_dir():
+    SANDBOX_PATH = f"{WORKSPACE}/.venv/bin:{SANDBOX_PATH}"
+
 class ShellResult(TypedDict):
     stdout: str
     stderr: str
     returncode: int
-
-
-WORKSPACE = Path.cwd()
-MAX_OUTPUT = 20_000
-
 
 def truncate(text: str) -> str:
     if len(text) <= MAX_OUTPUT:
@@ -26,10 +28,52 @@ def truncate(text: str) -> str:
 
 
 def shell(command: str) -> ShellResult:
+    sandbox_command = [
+        "bwrap",
+
+        # namespace isolation
+        "--unshare-all",
+        "--die-with-parent",
+
+        # expose system program read-only
+        "--ro-bind", "/", "/",
+        
+        # minimal runtime filesystem
+        # procfs 获取沙箱内进程信息
+        "--proc", "/proc",
+        "--dev", "/dev",
+        # 创建一个和沙箱生命周期绑定的临时文件系统
+        "--tmpfs", "/tmp",
+        "--dir", "/tmp/home",
+
+        # only project directory is writable
+        "--bind", str(WORKSPACE), str(WORKSPACE),
+        # 把工作目录切换到 DIR
+        "--chdir", str(WORKSPACE),
+
+        # do not leak DEEP_SEEK_API etc.
+        "--clearenv",
+        "--setenv", "HOME", "/tmp/home",
+        "--setenv", "PATH", SANDBOX_PATH,
+        "--setenv", "LANG", "C.UTF-8",
+    ]
+
+    if(WORKSPACE / ".env").exists():
+        sandbox_command += [
+            "--ro-bind", "/dev/null", f"{WORKSPACE}/.env"
+        ]
+
+    # command 应该在参数的后面
+    sandbox_command += [
+        # actual command
+        "/usr/bin/bash",
+        "-c",
+        command
+    ]
+
     try:
         completed = subprocess.run(
-            ["bash", "-c", command],
-            cwd=WORKSPACE,
+            sandbox_command,
             capture_output=True,
             text=True,
             check=False,
