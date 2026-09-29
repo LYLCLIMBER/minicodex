@@ -71,6 +71,33 @@ tool_handlers = {
     "shell": shell,
 }
 
+def execute_tool(name: str, arguments: str):
+    try:
+        parsed = json.loads(arguments)
+        if not isinstance(parsed, dict):
+            return {
+                "ok": False,
+                "error": "Tool arguments must be a JSON object"
+            }
+
+        handler = tool_handlers.get(name)
+        if handler is None:
+            raise ValueError(f"Unknown tool: {name}")
+
+        result = handler(**parsed)
+
+        return {
+            "ok": True,
+            "result": result,
+        }
+
+    except Exception as e: # noqa: BLE001
+        return {
+            "ok": False,
+            "error": type(e).__name__,
+            "message": str(e)
+        }
+
 # --------------------------
 # agent loop
 # --------------------------
@@ -108,12 +135,9 @@ def run_agent(input_list: ResponseInputParam) -> str:
 
         # 执行所有 tool calls
         for call in function_calls:
-            arguments = json.loads(call.arguments)
-            handler = tool_handlers[call.name]
-            result = handler(**arguments)
-
+            result = execute_tool(call.name, call.arguments)
             # print(f"tool: {call.name}")
-            # print(f"arguments: {call.arguments}")
+            print(f"arguments: {call.arguments}")
             # print(f"result: {result}")
 
             # 将工具执行结果返回给模型
