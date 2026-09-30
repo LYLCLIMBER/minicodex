@@ -1,5 +1,6 @@
-from pathlib import Path
 from uuid import uuid4
+
+import pytest
 
 from tools import WORKSPACE, shell
 
@@ -15,13 +16,19 @@ def test_workspace_is_writable():
 
 
 def test_env_cannot_be_read():
-    result = shell(f"cat {WORKSPACE}/.env > /dev/null")
+    if not (WORKSPACE / ".env").is_file():
+        pytest.skip(".env does not exist")
+
+    result = shell(f"cat {WORKSPACE}/.env")
 
     assert result["returncode"] != 0
+    assert result["stdout"] == ''
 
 
 def test_cannot_write_outside_workspace():
-    target = Path("/etc") / f"sandbox_write_test_{uuid4().hex}.tmp"
+    target = WORKSPACE.parent / f"sandbox_write_test_{uuid4().hex}.tmp"
+    target.unlink(missing_ok=True)
+
     try:
         result = shell(f"touch {target}")
 
