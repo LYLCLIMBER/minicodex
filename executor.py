@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from tools import calculator, shell
 
@@ -8,7 +9,7 @@ tool_handlers = {
 }
 
 
-def execute_tool(name: str, arguments: str):
+def execute_tool(name: str, arguments: str, *, workspace: Path):
     try:
         parsed = json.loads(arguments)
 
@@ -23,7 +24,10 @@ def execute_tool(name: str, arguments: str):
         if handler is None:
             raise ValueError(f"Unknown tool: {name}")
 
-        result = handler(**parsed)
+        if name == "shell":
+            result = handler(**parsed, workspace=workspace)
+        else:
+            result = handler(**parsed)
 
         return {
             "ok": True,

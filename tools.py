@@ -8,12 +8,8 @@ from typing import TypedDict
 # shell
 # ----------------
 
-WORKSPACE = Path.cwd().resolve()
 MAX_OUTPUT = 20_000
 SANDBOX_PATH = "/usr/local/bin:/usr/bin:/bin"
-
-if(WORKSPACE / ".venv" / "bin").is_dir():
-    SANDBOX_PATH = f"{WORKSPACE}/.venv/bin:{SANDBOX_PATH}"
 
 class ShellResult(TypedDict):
     stdout: str
@@ -27,7 +23,11 @@ def truncate(text: str) -> str:
     return text[:MAX_OUTPUT] + "\n... [output truncated]"
 
 
-def shell(command: str) -> ShellResult:
+def shell(command: str, *, workspace: Path) -> ShellResult:
+    sandbox_path = SANDBOX_PATH
+    if (workspace / ".venv" / "bin").is_dir():
+        sandbox_path = f"{workspace}/.venv/bin:{sandbox_path}"
+        
     sandbox_command = [
         "bwrap",
 
@@ -47,20 +47,20 @@ def shell(command: str) -> ShellResult:
         "--dir", "/tmp/home",
 
         # only project directory is writable
-        "--bind", str(WORKSPACE), str(WORKSPACE),
+        "--bind", str(workspace), str(workspace),
         # 把工作目录切换到 DIR
-        "--chdir", str(WORKSPACE),
+        "--chdir", str(workspace),
 
         # do not leak DEEP_SEEK_API etc.
         "--clearenv",
         "--setenv", "HOME", "/tmp/home",
-        "--setenv", "PATH", SANDBOX_PATH,
+        "--setenv", "PATH", sandbox_path,
         "--setenv", "LANG", "C.UTF-8",
     ]
 
-    if(WORKSPACE / ".env").exists():
+    if(workspace / ".env").exists():
         sandbox_command += [
-            "--ro-bind", "/dev/null", f"{WORKSPACE}/.env"
+            "--ro-bind", "/dev/null", f"{workspace}/.env"
         ]
 
     # command 应该在参数的后面

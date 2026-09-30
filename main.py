@@ -1,7 +1,7 @@
-"""程序入口和组装"""
-
+import argparse
 import json
 import os
+from pathlib import Path
 from typing import cast
 
 from dotenv import load_dotenv
@@ -14,12 +14,6 @@ from openai.types.responses import (
 from prompt_toolkit import prompt
 
 from executor import execute_tool
-
-load_dotenv()
-
-client = OpenAI(
-    api_key=os.environ["DEEPSEEK_API_KEY"], base_url="https://api.deepseek.com"
-)
 
 # --------------------------
 # function definition
@@ -71,7 +65,7 @@ tools: list[FunctionToolParam] = [
 
 MAX_STEPS = 10
 
-def run_agent(input_list: ResponseInputParam) -> str:
+def run_agent(input_list: ResponseInputParam, *, client: OpenAI, workspace: Path) -> str:
     for step in range(MAX_STEPS):
         response = client.responses.create(
             model="deepseek-flash",
@@ -93,8 +87,10 @@ def run_agent(input_list: ResponseInputParam) -> str:
                 )
             )
 
-        # 找出所有 tool calls；注意 function call 只是 tool call 的一种具体形式
-        function_calls = [item for item in response.output if item.type == "function_call"]
+        # 找出所有 tool calls；function call 只是 tool call 的一种具体形式
+        function_calls = [
+            item for item in response.output if item.type == "function_call"
+        ]
 
         # 如果没有 tool calls，说明模型已经给出最终回答
         if not function_calls:
@@ -102,7 +98,7 @@ def run_agent(input_list: ResponseInputParam) -> str:
 
         # 执行所有 tool calls
         for call in function_calls:
-            result = execute_tool(call.name, call.arguments)
+            result = execute_tool(call.name, call.arguments, workspace=workspace)
             # print(f"tool: {call.name}")
             print(f"arguments: {call.arguments}")
             # print(f"result: {result}")
@@ -118,6 +114,23 @@ def run_agent(input_list: ResponseInputParam) -> str:
     raise RuntimeError("Agent exceeded maximum number of steps")
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--workspace", type=Path)
+    args = parser.parse_args()
+
+    workspace = (
+        args.workspace.expanduser().resolve()
+        if args.workspace is not None
+        else Path.cwd().resolve()
+    )
+    if not workspace.is_dir():
+        parser.error(f"{workspace} 不是目录")
+
+    load_dotenv()
+    client = OpenAI(
+        api_key=os.environ["DEEPSEEK_API_KEY"], base_url="https://api.deepseek.com"
+    )
+
     input_list: ResponseInputParam = []
 
     while True:
@@ -126,7 +139,7 @@ def main():
         except (EOFError, KeyboardInterrupt):
             print()
             break
-        
+
         if not user_input:
             continue
         if user_input in {"/exit", "/quit"}:
@@ -139,7 +152,7 @@ def main():
             }
         )
 
-        answer = run_agent(input_list)
+        answer = run_agent(input_list, client=client, workspace=workspace)
         print(f"\nassistant>{answer}\n")
 
 if __name__ == "__main__":
