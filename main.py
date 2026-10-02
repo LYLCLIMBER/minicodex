@@ -100,7 +100,7 @@ def run_agent(input_list: ResponseInputParam, *, client: OpenAI, workspace: Path
         for call in function_calls:
             result = execute_tool(call.name, call.arguments, workspace=workspace)
             # print(f"tool: {call.name}")
-            print(f"arguments: {call.arguments}")
+            # print(f"arguments: {call.arguments}")
             # print(f"result: {result}")
 
             # 将工具执行结果返回给模型
