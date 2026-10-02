@@ -1,0 +1,6 @@
+{
+  "orders": [
+    {"id": "B01", "status": "cancelled", "amount": 200},
+    {"id": "B02", "status": "paid", "amount": 40}
+  ]
+}
