@@ -16,3 +16,5 @@ API 文档：
 - [Unrolling the codex agent loop | OpenAI](https://openai.com/zh-Hans-CN/index/unrolling-the-codex-agent-loop)
 - [Writing tools for agents | Anthropic](https://www.anthropic.com/engineering/writing-tools-for-agents)
 
+偶然发现的有价值资源：
+- [Inspect Doc](https://inspect.aisi.org.uk/sandboxing.html) 这是 Agent evaluation 的工业化版本实现
